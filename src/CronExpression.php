@@ -30,9 +30,9 @@ class CronExpression {
   private bool $dowStar;
 
   /**
-   * Maximum iterations for next/previous search (just over 1 year of minutes).
+   * Maximum search iterations; covers a 4-year leap cycle of minutes.
    */
-  private const MAX_ITERATIONS = 527040;
+  private const MAX_ITERATIONS = 2_103_840;
 
   /**
    * Constructs a CronExpression.
@@ -79,12 +79,27 @@ class CronExpression {
     $dt->setTime((int) $dt->format('H'), (int) $dt->format('i'), 0);
 
     for ($i = 0; $i < self::MAX_ITERATIONS; $i++) {
+      if (!$this->monthMatches($dt)) {
+        $dt->modify('first day of next month');
+        $dt->setTime(0, 0, 0);
+        continue;
+      }
+      if (!$this->dayMatches($dt)) {
+        $dt->modify('+1 day');
+        $dt->setTime(0, 0, 0);
+        continue;
+      }
+      if (!$this->hourMatches($dt)) {
+        $dt->modify('+1 hour');
+        $dt->setTime((int) $dt->format('H'), 0, 0);
+        continue;
+      }
       if ($this->matches($dt)) {
         return $dt;
       }
       $dt->modify('+1 minute');
     }
-    throw new \RuntimeException('No cron match found within 1 year.');
+    throw new \RuntimeException('No cron match found within iteration limit.');
   }
 
   /**
@@ -105,12 +120,27 @@ class CronExpression {
     $dt->setTime((int) $dt->format('H'), (int) $dt->format('i'), 0);
 
     for ($i = 0; $i < self::MAX_ITERATIONS; $i++) {
+      if (!$this->monthMatches($dt)) {
+        $dt->modify('last day of last month');
+        $dt->setTime(23, 59, 0);
+        continue;
+      }
+      if (!$this->dayMatches($dt)) {
+        $dt->modify('-1 day');
+        $dt->setTime(23, 59, 0);
+        continue;
+      }
+      if (!$this->hourMatches($dt)) {
+        $dt->modify('-1 hour');
+        $dt->setTime((int) $dt->format('H'), 59, 0);
+        continue;
+      }
       if ($this->matches($dt)) {
         return $dt;
       }
       $dt->modify('-1 minute');
     }
-    throw new \RuntimeException('No cron match found within 1 year.');
+    throw new \RuntimeException('No cron match found within iteration limit.');
   }
 
   /**
@@ -133,32 +163,25 @@ class CronExpression {
   }
 
   /**
-   * Checks whether $dt matches this expression.
-   *
-   * @param \DateTimeInterface $dt
-   *   The date/time to test.
-   *
-   * @return bool
-   *   TRUE if the date/time matches the expression.
+   * Returns TRUE if the month field matches $dt.
    */
-  private function matches(\DateTimeInterface $dt): bool {
-    $minute = (int) $dt->format('i');
-    $hour   = (int) $dt->format('G');
-    $dom    = (int) $dt->format('j');
-    $month  = (int) $dt->format('n');
-    $dow    = (int) $dt->format('w');
+  private function monthMatches(\DateTimeInterface $dt): bool {
+    return isset($this->fields[3][(int) $dt->format('n')]);
+  }
 
-    if (!isset($this->fields[0][$minute])) {
-      return FALSE;
-    }
-    if (!isset($this->fields[1][$hour])) {
-      return FALSE;
-    }
-    if (!isset($this->fields[3][$month])) {
-      return FALSE;
-    }
+  /**
+   * Returns TRUE if the hour field matches $dt.
+   */
+  private function hourMatches(\DateTimeInterface $dt): bool {
+    return isset($this->fields[1][(int) $dt->format('G')]);
+  }
 
-    // DOM/DOW: OR when both restricted; AND when either is a wildcard.
+  /**
+   * Returns TRUE if the DOM/DOW fields match $dt (OR logic when both set).
+   */
+  private function dayMatches(\DateTimeInterface $dt): bool {
+    $dom = (int) $dt->format('j');
+    $dow = (int) $dt->format('w');
     if ($this->domStar && $this->dowStar) {
       return TRUE;
     }
@@ -168,8 +191,25 @@ class CronExpression {
     if ($this->dowStar) {
       return isset($this->fields[2][$dom]);
     }
-    // Neither is *, use OR.
     return isset($this->fields[2][$dom]) || isset($this->fields[4][$dow]);
+  }
+
+  /**
+   * Checks whether $dt matches this expression.
+   *
+   * @param \DateTimeInterface $dt
+   *   The date/time to test.
+   *
+   * @return bool
+   *   TRUE if the date/time matches the expression.
+   */
+  private function matches(\DateTimeInterface $dt): bool {
+    if (!isset($this->fields[0][(int) $dt->format('i')])) {
+      return FALSE;
+    }
+    return $this->hourMatches($dt)
+      && $this->monthMatches($dt)
+      && $this->dayMatches($dt);
   }
 
   /**

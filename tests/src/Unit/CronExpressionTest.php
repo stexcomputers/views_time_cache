@@ -235,6 +235,43 @@ class CronExpressionTest extends UnitTestCase {
   }
 
   /**
+   * Smart-skip reaches Feb 29 within the same leap year.
+   *
+   * @covers ::getNextRunDate
+   */
+  public function testNextRunLeapDaySameYear(): void {
+    $expr = new CronExpression('0 0 29 2 *');
+    $from = new \DateTime('2024-01-01 00:00:00');
+    $next = $expr->getNextRunDate($from);
+    $this->assertSame('2024-02-29 00:00:00', $next->format('Y-m-d H:i:s'));
+  }
+
+  /**
+   * Smart-skip crosses three non-leap years to reach the next Feb 29.
+   *
+   * @covers ::getNextRunDate
+   */
+  public function testNextRunLeapDayCrossesNonLeapYears(): void {
+    $expr = new CronExpression('0 0 29 2 *');
+    // Just past the 2024 leap day; next occurrence is Feb 29 2028.
+    $from = new \DateTime('2024-03-01 00:00:00');
+    $next = $expr->getNextRunDate($from);
+    $this->assertSame('2028-02-29 00:00:00', $next->format('Y-m-d H:i:s'));
+  }
+
+  /**
+   * Smart-skip finds the most-recent Feb 29 when going backward.
+   *
+   * @covers ::getPreviousRunDate
+   */
+  public function testPreviousRunLeapDay(): void {
+    $expr = new CronExpression('0 0 29 2 *');
+    $before = new \DateTime('2024-03-01 00:00:00');
+    $prev = $expr->getPreviousRunDate($before);
+    $this->assertSame('2024-02-29 00:00:00', $prev->format('Y-m-d H:i:s'));
+  }
+
+  /**
    * Entry created after boundary is valid; entry before boundary is stale.
    *
    * @covers ::getPreviousRunDate

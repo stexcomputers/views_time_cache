@@ -1,0 +1,9 @@
+parameters:
+    level: 1
+    paths:
+        - src/
+        - tests/
+
+includes:
+    - vendor/mglaman/phpstan-drupal/extension.neon
+    - vendor/phpstan/phpstan-deprecation-rules/rules.neon

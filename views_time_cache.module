@@ -1,0 +1,27 @@
+<?php
+
+/**
+ * @file
+ * Views Time Cache module hooks.
+ */
+
+use Drupal\Core\Routing\RouteMatchInterface;
+
+/**
+ * Implements hook_help().
+ */
+function views_time_cache_help(
+  string $route_name,
+  RouteMatchInterface $route_match,
+): string {
+  if ($route_name !== 'help.page.views_time_cache') {
+    return '';
+  }
+  return '<p>' . t(
+    'Provides a <em>Time-based (presets &amp; cron)</em> cache plugin for
+    Views. Configure it per-display under <em>Advanced &rarr; Caching</em>.
+    Choose a friendly preset interval (1 h, 6 h, 12 h, 1 day, 1 week, or
+    Forever) independently for query results and rendered output, or enter a
+    5-field cron expression to expire the cache at recurring time boundaries.'
+  ) . '</p>';
+}

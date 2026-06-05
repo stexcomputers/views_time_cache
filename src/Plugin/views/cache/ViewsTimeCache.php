@@ -4,6 +4,7 @@ namespace Drupal\views_time_cache\Plugin\views\cache;
 
 use Drupal\Component\Datetime\TimeInterface;
 use Drupal\Core\Cache\Cache;
+use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Datetime\DateFormatterInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
@@ -42,6 +43,8 @@ class ViewsTimeCache extends CachePluginBase {
    *   Date formatter service.
    * @param \Drupal\Component\Datetime\TimeInterface $time
    *   Time service.
+   * @param \Drupal\Core\Config\ConfigFactoryInterface $configFactory
+   *   Config factory service.
    */
   public function __construct(
     array $configuration,
@@ -49,6 +52,7 @@ class ViewsTimeCache extends CachePluginBase {
     $plugin_definition,
     protected DateFormatterInterface $dateFormatter,
     protected TimeInterface $time,
+    protected ConfigFactoryInterface $configFactory,
   ) {
     parent::__construct($configuration, $plugin_id, $plugin_definition);
   }
@@ -68,6 +72,7 @@ class ViewsTimeCache extends CachePluginBase {
       $plugin_definition,
       $container->get('date.formatter'),
       $container->get('datetime.time'),
+      $container->get('config.factory'),
     );
   }
 
@@ -253,7 +258,7 @@ class ViewsTimeCache extends CachePluginBase {
    */
   private function getCronCutoff(): int|false {
     try {
-      $now = new \DateTime('@' . $this->time->getRequestTime());
+      $now = $this->getSiteNow();
       $expr = new CronExpression($this->options['cron_expression']);
       return $expr->getPreviousRunDate($now)->getTimestamp();
     }
@@ -270,7 +275,7 @@ class ViewsTimeCache extends CachePluginBase {
    */
   private function getCronMaxAge(): int {
     try {
-      $now = new \DateTime('@' . $this->time->getRequestTime());
+      $now = $this->getSiteNow();
       $expr = new CronExpression($this->options['cron_expression']);
       $next = $expr->getNextRunDate($now);
       return max(1, $next->getTimestamp() - $this->time->getRequestTime());
@@ -278,6 +283,20 @@ class ViewsTimeCache extends CachePluginBase {
     catch (\Throwable) {
       return Cache::PERMANENT;
     }
+  }
+
+  /**
+   * Returns a DateTime for the current request in the configured site timezone.
+   *
+   * @return \DateTime
+   *   Current time with the site timezone applied.
+   */
+  private function getSiteNow(): \DateTime {
+    $tzName = $this->configFactory
+      ->get('system.date')
+      ->get('timezone.default') ?? 'UTC';
+    return (new \DateTime('@' . $this->time->getRequestTime()))
+      ->setTimezone(new \DateTimeZone($tzName));
   }
 
 }
