@@ -2,6 +2,8 @@
 .claude-project-skills.json
 PROJECT_LOG.md
 project-log.html
+# Local-only PHPUnit bootstrap with absolute paths (drupal.org CI uses core's).
+phpunit-bootstrap.php
 
 # OS
 .DS_Store
