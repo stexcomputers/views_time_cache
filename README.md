@@ -18,7 +18,7 @@ invalidation active, so the view still rebuilds when its underlying content chan
 
 ## Requirements
 
-- Drupal 10.2 or higher, or Drupal 11.x
+- Drupal 10.3 or higher, or Drupal 11.x
 - Views (included in Drupal core)
 
 ## Installation
