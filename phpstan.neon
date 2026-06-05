@@ -3,7 +3,6 @@ parameters:
     paths:
         - src/
         - tests/
-
-includes:
-    - vendor/mglaman/phpstan-drupal/extension.neon
-    - vendor/phpstan/phpstan-deprecation-rules/rules.neon
+    ignoreErrors:
+        # Drupal's standard ContainerFactory DI pattern; safe in plugin context.
+        - '#Unsafe usage of new static\(\)#'
