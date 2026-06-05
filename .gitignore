@@ -1,0 +1,17 @@
+# Development tooling
+.claude-project-skills.json
+PROJECT_LOG.md
+project-log.html
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*~
+
+# PHP
+vendor/

@@ -1,0 +1,17 @@
+views.cache.views_time_cache:
+  type: views_cache
+  label: 'Time-based (presets & cron)'
+  mapping:
+    options:
+      type: mapping
+      label: 'Cache options'
+      mapping:
+        cache_mode:
+          type: string
+          label: 'Cache mode (preset or cron)'
+        preset:
+          type: integer
+          label: 'Preset interval in seconds (0 = forever)'
+        cron_expression:
+          type: string
+          label: 'Cron expression'

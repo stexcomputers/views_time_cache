@@ -1,0 +1,7 @@
+name: 'Views Time Cache'
+type: module
+description: 'Provides a time-based Views cache plugin with friendly preset intervals and cron expression support.'
+core_version_requirement: ^10 || ^11
+package: Views
+dependencies:
+  - drupal:views
