@@ -50,6 +50,11 @@ class CronExpressionTest extends UnitTestCase {
       'dow sunday alt 7'  => ['0 0 * * 7'],
       'range step'        => ['0 1-23/2 * * *'],
       'complex'           => ['5,35 6-22/2 * 1-6 1-5'],
+      // DOM 31 with wildcard month: satisfiable (Jan/Mar/May/Jul/Aug/Oct/Dec).
+      'dom 31 any month'  => ['0 0 31 * *'],
+      // Feb 30 with a constrained DOW: satisfiable via DOW OR logic (Mondays in
+      // Feb exist even though Feb never has a 30th day).
+      'feb 30 with dow'   => ['0 0 30 2 1'],
     ];
   }
 
@@ -71,6 +76,12 @@ class CronExpressionTest extends UnitTestCase {
       'step zero'           => ['*/0 * * * *'],
       'non-numeric'         => ['a * * * *'],
       'empty string'        => [''],
+      // Impossible DOM/month combinations (DOW is wildcard, so no weekday
+      // OR-rescue): the constructor should reject these to prevent long scans.
+      'feb 30'              => ['0 0 30 2 *'],
+      'feb 31'              => ['0 0 31 2 *'],
+      'apr 31'              => ['0 0 31 4 *'],
+      'sep 31'              => ['0 0 31 9 *'],
     ];
   }
 

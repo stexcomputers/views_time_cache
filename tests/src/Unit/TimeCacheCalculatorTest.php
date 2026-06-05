@@ -105,6 +105,26 @@ class TimeCacheCalculatorTest extends UnitTestCase {
   }
 
   /**
+   * Impossible DOM/month combination is rejected fast and returns PERMANENT.
+   *
+   * Regression test: before the unsatisfiable-date check, an expression like
+   * '0 0 30 2 *' (Feb 30) would scan ~2 M iterations (~3 s) before falling
+   * back to PERMANENT.  With the fix the constructor throws immediately and
+   * maxAgeForCron() returns PERMANENT in microseconds.
+   *
+   * @covers ::maxAgeForCron
+   */
+  public function testMaxAgeForCronImpossibleDateReturnsPermanentFast(): void {
+    $calc = $this->buildCalculator(self::FIXTURE_TS);
+    $start = microtime(TRUE);
+    $result = $calc->maxAgeForCron('0 0 30 2 *');
+    $elapsed = microtime(TRUE) - $start;
+    $this->assertSame(Cache::PERMANENT, $result);
+    // Should resolve in well under 1 second; 0.5 s is generous on any host.
+    $this->assertLessThan(0.5, $elapsed, 'Impossible expression must fail fast.');
+  }
+
+  /**
    * @covers ::cutoffForCron
    */
   public function testCutoffForCronHourly(): void {

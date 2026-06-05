@@ -30,18 +30,14 @@ class CronExpression {
   private bool $dowStar;
 
   /**
-   * Maximum search iterations; covers a 4-year leap cycle of minutes.
-   */
-  private const MAX_ITERATIONS = 2_103_840;
-
-  /**
    * Constructs a CronExpression.
    *
    * @param string $expression
    *   A standard 5-field cron expression.
    *
    * @throws \InvalidArgumentException
-   *   If the expression format is invalid.
+   *   If the expression format is invalid or describes an impossible date
+   *   (e.g. Feb 30, Apr 31) when the day-of-week field is unrestricted.
    */
   public function __construct(string $expression) {
     $parts = preg_split('/\s+/', trim($expression));
@@ -58,6 +54,45 @@ class CronExpression {
     ];
     $this->domStar = (trim($parts[2]) === '*');
     $this->dowStar = (trim($parts[4]) === '*');
+
+    // When DOW is unrestricted and DOM is constrained, verify that at least
+    // one month/day combination is satisfiable. For example, '0 0 30 2 *'
+    // (Feb 30) must be rejected. February uses 29 so that the valid leap-day
+    // expression '0 0 29 2 *' is still accepted.
+    // This check is skipped when DOW is also constrained (non-star) because
+    // the OR logic means any matching weekday in the month is sufficient —
+    // e.g. '0 0 30 2 1' (30th of Feb OR any Monday in Feb) IS satisfiable.
+    if ($this->dowStar && !$this->domStar) {
+      $maxDaysByMonth = [
+        1  => 31,
+        2  => 29,
+        3  => 31,
+        4  => 30,
+        5  => 31,
+        6  => 30,
+        7  => 31,
+        8  => 31,
+        9  => 30,
+        10 => 31,
+        11 => 30,
+        12 => 31,
+      ];
+      $satisfiable = FALSE;
+      foreach (array_keys($this->fields[3]) as $month) {
+        $maxDays = $maxDaysByMonth[$month];
+        foreach (array_keys($this->fields[2]) as $dom) {
+          if ($dom <= $maxDays) {
+            $satisfiable = TRUE;
+            break 2;
+          }
+        }
+      }
+      if (!$satisfiable) {
+        throw new \InvalidArgumentException(
+          'The day-of-month and month combination never matches any calendar date.'
+        );
+      }
+    }
   }
 
   /**
@@ -70,7 +105,7 @@ class CronExpression {
    *   The next matching date/time.
    *
    * @throws \RuntimeException
-   *   If no match is found within 1 year.
+   *   If no match is found within a 5-year search window.
    */
   public function getNextRunDate(\DateTimeInterface $after): \DateTime {
     $dt = \DateTime::createFromInterface($after);
@@ -78,7 +113,12 @@ class CronExpression {
     $dt->setTimestamp($dt->getTimestamp() + 60);
     $dt->setTime((int) $dt->format('H'), (int) $dt->format('i'), 0);
 
-    for ($i = 0; $i < self::MAX_ITERATIONS; $i++) {
+    // 5-year guard: every valid cron expression recurs within 4 years
+    // (the longest cycle is a Feb-29 leap-day expression).  Impossible
+    // expressions are rejected in __construct(), so this limit is purely
+    // defence-in-depth and will be reached only in pathological edge cases.
+    $limit = (clone $dt)->modify('+5 years');
+    while ($dt <= $limit) {
       if (!$this->monthMatches($dt)) {
         $dt->modify('first day of next month');
         $dt->setTime(0, 0, 0);
@@ -99,7 +139,7 @@ class CronExpression {
       }
       $dt->modify('+1 minute');
     }
-    throw new \RuntimeException('No cron match found within iteration limit.');
+    throw new \RuntimeException('No cron match found within 5-year search window.');
   }
 
   /**
@@ -112,14 +152,16 @@ class CronExpression {
    *   The previous (or current) matching date/time.
    *
    * @throws \RuntimeException
-   *   If no match is found within 1 year.
+   *   If no match is found within a 5-year search window.
    */
   public function getPreviousRunDate(\DateTimeInterface $before): \DateTime {
     $dt = \DateTime::createFromInterface($before);
     // Truncate to the current minute.
     $dt->setTime((int) $dt->format('H'), (int) $dt->format('i'), 0);
 
-    for ($i = 0; $i < self::MAX_ITERATIONS; $i++) {
+    // 5-year guard (see getNextRunDate for rationale).
+    $limit = (clone $dt)->modify('-5 years');
+    while ($dt >= $limit) {
       if (!$this->monthMatches($dt)) {
         $dt->modify('last day of last month');
         $dt->setTime(23, 59, 0);
@@ -140,7 +182,7 @@ class CronExpression {
       }
       $dt->modify('-1 minute');
     }
-    throw new \RuntimeException('No cron match found within iteration limit.');
+    throw new \RuntimeException('No cron match found within 5-year search window.');
   }
 
   /**
