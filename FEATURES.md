@@ -30,7 +30,19 @@
   a descriptive error message
 - On runtime parse failure the plugin falls back to "never expire" (safe default)
 
+## Per-block cache max-age
+
+- Overrides the render-cache max-age on **any block** placed via the Block
+  Layout UI (Structure → Block layout)
+- Same three modes available as the Views plugin: **Preset interval**,
+  **Forever**, and **Cron expression**
+- Collapsed "Cache max-age" fieldset on each block's configure form — only
+  visible to users with the new **Administer block cache max-age** permission
+- Drupal's cacheability bubbling means this value replaces the block plugin's
+  own declared max-age; it cannot force caching of inherently dynamic content
+  (if the block's content declares max-age 0, that still wins)
+
 ## No external dependencies
 
 - Self-contained cron evaluator — no extra Composer packages required
-- Drop-in compatible with any Drupal 10.2+ or 11.x site
+- Drop-in compatible with any Drupal 10.3+ or 11.x site

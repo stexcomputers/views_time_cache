@@ -5,7 +5,12 @@
  * Views Time Cache module hooks.
  */
 
+use Drupal\block\BlockForm;
+use Drupal\block\Entity\Block;
+use Drupal\Core\Entity\EntityInterface;
+use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Routing\RouteMatchInterface;
+use Drupal\views_time_cache\CronExpression;
 
 /**
  * Implements hook_help().
@@ -23,5 +28,232 @@ function views_time_cache_help(
     Choose a friendly preset interval (1 h, 6 h, 12 h, 1 day, 1 week, or
     Forever) independently for query results and rendered output, or enter a
     5-field cron expression to expire the cache at recurring time boundaries.'
+  ) . '</p>'
+  . '<p>' . t(
+    'Block cache max-age: Users with the
+    <em>Administer block cache max-age</em> permission can also override the
+    render-cache lifetime for any block via its configuration form
+    (<em>Structure &rarr; Block layout &rarr; Configure</em>). The same
+    preset and cron modes are available. Note that Drupal uses the minimum of
+    all merged cacheability max-ages, so this value overrides the block
+    plugin\'s default but cannot force caching of inherently dynamic content.'
   ) . '</p>';
+}
+
+/**
+ * Implements hook_form_BASE_FORM_ID_alter() for block_form.
+ *
+ * Adds a "Cache max-age" fieldset to every block configuration form so that
+ * privileged administrators can override a block's render-cache max-age.
+ */
+function views_time_cache_form_block_form_alter(
+  array &$form,
+  FormStateInterface $form_state,
+): void {
+  // Safety guard: only act on the actual block config entity form.
+  if (!($form_state->getFormObject() instanceof BlockForm)) {
+    return;
+  }
+  // Gate the field behind the custom permission.
+  if (!\Drupal::currentUser()
+    ->hasPermission('administer block cache max-age')) {
+    return;
+  }
+
+  /** @var \Drupal\block\Entity\Block $entity */
+  $entity = $form_state->getFormObject()->getEntity();
+  $mode = $entity->getThirdPartySetting(
+    'views_time_cache', 'max_age_mode'
+  ) ?? '';
+  $preset = $entity->getThirdPartySetting(
+    'views_time_cache', 'max_age_preset'
+  ) ?? 3600;
+  $cronExpr = $entity->getThirdPartySetting(
+    'views_time_cache', 'cron_expression'
+  ) ?? '0 * * * *';
+
+  /** @var \Drupal\views_time_cache\TimeCacheCalculator $calculator */
+  $calculator = \Drupal::service('views_time_cache.calculator');
+
+  $selector = ':input[name="third_party_settings'
+    . '[views_time_cache][max_age_mode]"]';
+
+  $form['third_party_settings']['views_time_cache'] = [
+    '#type'   => 'details',
+    '#title'  => t('Cache max-age'),
+    '#open'   => $mode !== '',
+    '#weight' => 20,
+    '#description' => t(
+      "Override this block's render-cache max-age. Drupal uses the
+      <em>minimum</em> of all merged cacheability lifetimes — this value
+      replaces the block plugin's default but cannot force caching of
+      inherently dynamic content."
+    ),
+  ];
+
+  $form['third_party_settings']['views_time_cache']['max_age_mode'] = [
+    '#type'          => 'radios',
+    '#title'         => t('Mode'),
+    '#options'       => [
+      ''       => t('No override (use block plugin default)'),
+      'preset' => t('Preset interval'),
+      'cron'   => t('Cron expression'),
+    ],
+    '#default_value' => $mode,
+  ];
+
+  $form['third_party_settings']['views_time_cache']['max_age_preset'] = [
+    '#type'          => 'select',
+    '#title'         => t('Interval'),
+    '#options'       => $calculator->getPresetOptions(),
+    '#default_value' => (int) $preset,
+    '#description'   => t(
+      'How long to hold this block in the render cache. <em>Forever</em> means until a cache tag invalidation.'
+    ),
+    '#states'        => [
+      'visible' => [$selector => ['value' => 'preset']],
+    ],
+  ];
+
+  $form['third_party_settings']['views_time_cache']['cron_expression'] = [
+    '#type'              => 'textfield',
+    '#title'             => t('Cron expression'),
+    '#default_value'     => $cronExpr,
+    '#description'       => t(
+      '5-field cron expression (min hr dom month dow). E.g. <code>0 * * * *</code> (expire each full hour).'
+    ),
+    '#element_validate'  => [
+      'views_time_cache_validate_block_cron_expression',
+    ],
+    '#states'            => [
+      'visible'  => [$selector => ['value' => 'cron']],
+      'required' => [$selector => ['value' => 'cron']],
+    ],
+  ];
+
+  $form['#entity_builders'][] = 'views_time_cache_block_entity_builder';
+}
+
+/**
+ * Element-validate callback for the block cron expression field.
+ *
+ * @param array $element
+ *   The form element.
+ * @param \Drupal\Core\Form\FormStateInterface $form_state
+ *   The current form state.
+ */
+function views_time_cache_validate_block_cron_expression(
+  array $element,
+  FormStateInterface $form_state,
+): void {
+  $mode = $form_state->getValue(
+    ['third_party_settings', 'views_time_cache', 'max_age_mode']
+  );
+  if ($mode !== 'cron') {
+    return;
+  }
+  $expr = trim($element['#value'] ?? '');
+  if ($expr === '') {
+    $form_state->setError($element, t('A cron expression is required.'));
+    return;
+  }
+  if (!CronExpression::isValid($expr)) {
+    $form_state->setError(
+      $element,
+      t(
+        'Invalid cron expression. Use 5-field format, e.g. <code>0 * * * *</code>.'
+      )
+    );
+  }
+}
+
+/**
+ * Entity builder for the block form: persists Views Time Cache settings.
+ *
+ * @param string $entity_type
+ *   The entity type ID ('block').
+ * @param \Drupal\Core\Entity\EntityInterface $entity
+ *   The block config entity being saved.
+ * @param array $form
+ *   The full form array.
+ * @param \Drupal\Core\Form\FormStateInterface $form_state
+ *   The current form state.
+ */
+function views_time_cache_block_entity_builder(
+  string $entity_type,
+  EntityInterface $entity,
+  array &$form,
+  FormStateInterface $form_state,
+): void {
+  /** @var \Drupal\block\Entity\Block $entity */
+  $values = $form_state->getValue(
+    ['third_party_settings', 'views_time_cache']
+  ) ?? [];
+
+  $mode = $values['max_age_mode'] ?? '';
+
+  if ($mode === '') {
+    // No override — remove any previously saved settings.
+    $entity->unsetThirdPartySetting('views_time_cache', 'max_age_mode');
+    $entity->unsetThirdPartySetting('views_time_cache', 'max_age_preset');
+    $entity->unsetThirdPartySetting('views_time_cache', 'cron_expression');
+    return;
+  }
+
+  $entity->setThirdPartySetting('views_time_cache', 'max_age_mode', $mode);
+  $entity->setThirdPartySetting(
+    'views_time_cache',
+    'max_age_preset',
+    (int) ($values['max_age_preset'] ?? 3600)
+  );
+  $entity->setThirdPartySetting(
+    'views_time_cache',
+    'cron_expression',
+    trim($values['cron_expression'] ?? '')
+  );
+}
+
+/**
+ * Implements hook_block_build_alter().
+ *
+ * Applies a configured max-age override to the block's render-cache metadata.
+ * Runs before the render-cache boundary so the stored cache entry reflects
+ * the administrator-chosen lifetime.
+ */
+function views_time_cache_block_build_alter(
+  array &$build,
+  // phpcs:ignore Drupal.Commenting.FunctionComment.TypeHintMissing
+  $block,
+): void {
+  // The outer $build created by BlockViewBuilder::viewMultiple() stores the
+  // block entity ID as keys[2].  Guard against unexpected structures.
+  if (!isset($build['#cache']['keys'][2])) {
+    return;
+  }
+
+  $entity = Block::load($build['#cache']['keys'][2]);
+  if ($entity === NULL) {
+    return;
+  }
+
+  $mode = $entity->getThirdPartySetting('views_time_cache', 'max_age_mode');
+  if (empty($mode)) {
+    return;
+  }
+
+  /** @var \Drupal\views_time_cache\TimeCacheCalculator $calculator */
+  $calculator = \Drupal::service('views_time_cache.calculator');
+
+  if ($mode === 'preset') {
+    $preset = (int) $entity->getThirdPartySetting(
+      'views_time_cache', 'max_age_preset', 3600
+    );
+    $build['#cache']['max-age'] = $calculator->maxAgeForPreset($preset);
+  }
+  elseif ($mode === 'cron') {
+    $expr = (string) $entity->getThirdPartySetting(
+      'views_time_cache', 'cron_expression', '0 * * * *'
+    );
+    $build['#cache']['max-age'] = $calculator->maxAgeForCron($expr);
+  }
 }

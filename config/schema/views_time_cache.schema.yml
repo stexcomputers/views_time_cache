@@ -1,3 +1,17 @@
+block.block.*.third_party.views_time_cache:
+  type: mapping
+  label: 'Views Time Cache block settings'
+  mapping:
+    max_age_mode:
+      type: string
+      label: 'Cache max-age mode (preset or cron; empty = no override)'
+    max_age_preset:
+      type: integer
+      label: 'Preset interval in seconds (0 = forever / Cache::PERMANENT)'
+    cron_expression:
+      type: string
+      label: 'Cron expression'
+
 views.cache.views_time_cache:
   type: views_cache
   label: 'Time-based (presets & cron)'

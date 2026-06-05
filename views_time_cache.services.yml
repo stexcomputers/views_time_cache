@@ -1,0 +1,6 @@
+services:
+  views_time_cache.calculator:
+    class: Drupal\views_time_cache\TimeCacheCalculator
+    arguments:
+      - '@datetime.time'
+      - '@config.factory'

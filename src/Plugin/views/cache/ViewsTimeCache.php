@@ -4,13 +4,13 @@ namespace Drupal\views_time_cache\Plugin\views\cache;
 
 use Drupal\Component\Datetime\TimeInterface;
 use Drupal\Core\Cache\Cache;
-use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Datetime\DateFormatterInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\views\Attribute\ViewsCache;
 use Drupal\views\Plugin\views\cache\CachePluginBase;
 use Drupal\views_time_cache\CronExpression;
+use Drupal\views_time_cache\TimeCacheCalculator;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -43,8 +43,8 @@ class ViewsTimeCache extends CachePluginBase {
    *   Date formatter service.
    * @param \Drupal\Component\Datetime\TimeInterface $time
    *   Time service.
-   * @param \Drupal\Core\Config\ConfigFactoryInterface $configFactory
-   *   Config factory service.
+   * @param \Drupal\views_time_cache\TimeCacheCalculator $calculator
+   *   Cache time calculator service.
    */
   public function __construct(
     array $configuration,
@@ -52,7 +52,7 @@ class ViewsTimeCache extends CachePluginBase {
     $plugin_definition,
     protected DateFormatterInterface $dateFormatter,
     protected TimeInterface $time,
-    protected ConfigFactoryInterface $configFactory,
+    protected TimeCacheCalculator $calculator,
   ) {
     parent::__construct($configuration, $plugin_id, $plugin_definition);
   }
@@ -72,7 +72,7 @@ class ViewsTimeCache extends CachePluginBase {
       $plugin_definition,
       $container->get('date.formatter'),
       $container->get('datetime.time'),
-      $container->get('config.factory'),
+      $container->get('views_time_cache.calculator'),
     );
   }
 
@@ -104,14 +104,6 @@ class ViewsTimeCache extends CachePluginBase {
       '#default_value' => $this->options['cache_mode'],
     ];
 
-    $preset_options = [
-      3600   => $this->t('1 hour'),
-      21600  => $this->t('6 hours'),
-      43200  => $this->t('12 hours'),
-      86400  => $this->t('1 day'),
-      604800 => $this->t('1 week'),
-      0      => $this->t('Forever'),
-    ];
     $preset_states = [
       'visible' => [
         ':input[name="cache_options[cache_mode]"]' => ['value' => 'preset'],
@@ -121,18 +113,22 @@ class ViewsTimeCache extends CachePluginBase {
     $form['results_preset'] = [
       '#type' => 'select',
       '#title' => $this->t('Query results'),
-      '#options' => $preset_options,
+      '#options' => $this->calculator->getPresetOptions(),
       '#default_value' => $this->options['results_preset'],
-      '#description' => $this->t('The length of time raw query results should be cached.'),
+      '#description' => $this->t(
+        'The length of time raw query results should be cached.'
+      ),
       '#states' => $preset_states,
     ];
 
     $form['output_preset'] = [
       '#type' => 'select',
       '#title' => $this->t('Rendered output'),
-      '#options' => $preset_options,
+      '#options' => $this->calculator->getPresetOptions(),
       '#default_value' => $this->options['output_preset'],
-      '#description' => $this->t('The length of time rendered HTML output should be cached.'),
+      '#description' => $this->t(
+        'The length of time rendered HTML output should be cached.'
+      ),
       '#states' => $preset_states,
     ];
 
@@ -140,7 +136,9 @@ class ViewsTimeCache extends CachePluginBase {
       '#type' => 'textfield',
       '#title' => $this->t('Cron expression'),
       '#default_value' => $this->options['cron_expression'],
-      '#description' => $this->t('5-field cron expression (min hr dom month dow). E.g. <code>0 * * * *</code> (hourly).'),
+      '#description' => $this->t(
+        '5-field cron expression (min hr dom month dow). E.g. <code>0 * * * *</code> (hourly).'
+      ),
       '#states' => [
         'visible' => [
           ':input[name="cache_options[cache_mode]"]' => ['value' => 'cron'],
@@ -160,12 +158,17 @@ class ViewsTimeCache extends CachePluginBase {
     if (($cache_options['cache_mode'] ?? '') === 'cron') {
       $expr = trim($cache_options['cron_expression'] ?? '');
       if ($expr === '') {
-        $form_state->setError($form['cron_expression'], $this->t('A cron expression is required.'));
+        $form_state->setError(
+          $form['cron_expression'],
+          $this->t('A cron expression is required.')
+        );
       }
       elseif (!CronExpression::isValid($expr)) {
         $form_state->setError(
           $form['cron_expression'],
-          $this->t('Invalid cron expression. Use 5-field format, e.g. <code>0 * * * *</code>.')
+          $this->t(
+            'Invalid cron expression. Use 5-field format, e.g. <code>0 * * * *</code>.'
+          )
         );
       }
     }
@@ -176,7 +179,10 @@ class ViewsTimeCache extends CachePluginBase {
    */
   public function summaryTitle() {
     if ($this->options['cache_mode'] === 'cron') {
-      return $this->t('Cron: @expr', ['@expr' => $this->options['cron_expression']]);
+      return $this->t(
+        'Cron: @expr',
+        ['@expr' => $this->options['cron_expression']]
+      );
     }
     $results = (int) $this->options['results_preset'];
     $output  = (int) $this->options['output_preset'];
@@ -184,17 +190,19 @@ class ViewsTimeCache extends CachePluginBase {
       if ($results === 0) {
         return $this->t('Forever');
       }
-      $interval = $this->dateFormatter->formatInterval($results, 1);
-      return $this->t('Every @interval', ['@interval' => $interval]);
+      return $this->t(
+        'Every @interval',
+        ['@interval' => $this->dateFormatter->formatInterval($results, 1)]
+      );
     }
     $ri = $this->dateFormatter->formatInterval($results, 1);
     $oi = $this->dateFormatter->formatInterval($output, 1);
     $results_label = $results === 0 ? $this->t('Forever') : $ri;
     $output_label = $output === 0 ? $this->t('Forever') : $oi;
-    return $this->t('@results / @output', [
-      '@results' => $results_label,
-      '@output'  => $output_label,
-    ]);
+    return $this->t(
+      '@results / @output',
+      ['@results' => $results_label, '@output' => $output_label]
+    );
   }
 
   /**
@@ -205,7 +213,9 @@ class ViewsTimeCache extends CachePluginBase {
    */
   protected function cacheExpire($type) {
     if ($this->options['cache_mode'] === 'cron') {
-      return $this->getCronCutoff();
+      return $this->calculator->cutoffForCron(
+        $this->options['cron_expression']
+      );
     }
     $lifespan = $this->getPresetLifespan($type);
     if ($lifespan === 0) {
@@ -219,7 +229,9 @@ class ViewsTimeCache extends CachePluginBase {
    */
   protected function cacheSetMaxAge($type) {
     if ($this->options['cache_mode'] === 'cron') {
-      return $this->getCronMaxAge();
+      return $this->calculator->maxAgeForCron(
+        $this->options['cron_expression']
+      );
     }
     $lifespan = $this->getPresetLifespan($type);
     return $lifespan > 0 ? $lifespan : Cache::PERMANENT;
@@ -246,57 +258,6 @@ class ViewsTimeCache extends CachePluginBase {
       return (int) $this->options['output_preset'];
     }
     return (int) $this->options['results_preset'];
-  }
-
-  /**
-   * Returns the most-recent cron boundary timestamp for staleness checking.
-   *
-   * Any cache entry created before this timestamp is considered expired.
-   *
-   * @return int|false
-   *   Unix timestamp of the last cron boundary, or FALSE on failure.
-   */
-  private function getCronCutoff(): int|false {
-    try {
-      $now = $this->getSiteNow();
-      $expr = new CronExpression($this->options['cron_expression']);
-      return $expr->getPreviousRunDate($now)->getTimestamp();
-    }
-    catch (\Throwable) {
-      return FALSE;
-    }
-  }
-
-  /**
-   * Returns seconds until the next cron boundary, for cache max-age metadata.
-   *
-   * @return int
-   *   Seconds until the next matching cron time, minimum 1.
-   */
-  private function getCronMaxAge(): int {
-    try {
-      $now = $this->getSiteNow();
-      $expr = new CronExpression($this->options['cron_expression']);
-      $next = $expr->getNextRunDate($now);
-      return max(1, $next->getTimestamp() - $this->time->getRequestTime());
-    }
-    catch (\Throwable) {
-      return Cache::PERMANENT;
-    }
-  }
-
-  /**
-   * Returns a DateTime for the current request in the configured site timezone.
-   *
-   * @return \DateTime
-   *   Current time with the site timezone applied.
-   */
-  private function getSiteNow(): \DateTime {
-    $tzName = $this->configFactory
-      ->get('system.date')
-      ->get('timezone.default') ?? 'UTC';
-    return (new \DateTime('@' . $this->time->getRequestTime()))
-      ->setTimezone(new \DateTimeZone($tzName));
   }
 
 }

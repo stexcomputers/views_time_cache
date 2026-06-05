@@ -66,6 +66,39 @@ Or download and place in `web/modules/contrib/views_time_cache/`, then enable vi
 When **both** day-of-month and day-of-week are specified, standard cron OR logic
 applies — the cache expires if **either** condition matches.
 
+## Block cache max-age
+
+In addition to the Views cache plugin, this module lets administrators set the
+render-cache max-age directly on **any block** placed via Block Layout.
+
+### Permission
+
+Grant **Administer block cache max-age** to trusted roles (e.g. Administrators).
+The field is hidden from users without this permission.
+
+### Usage
+
+1. Go to **Structure → Block layout** and click **Configure** on any block.
+2. Expand the **Cache max-age** fieldset (visible only when permission is granted).
+3. Choose a mode:
+   - **No override** — leave the block plugin's default max-age unchanged.
+   - **Preset interval** — pick a duration (1 hour through 1 week, or *Forever*).
+   - **Cron expression** — enter a 5-field expression; the block cache expires at
+     each matching boundary.
+4. Save the block configuration.
+
+### Important note on caching semantics
+
+Drupal merges cacheability metadata using the **minimum** max-age across the
+entire render subtree.  This means:
+
+- The chosen max-age **replaces** what the block plugin itself declares.
+- It is still bounded below by the block's content — if the rendered content
+  declares max-age 0 (e.g. a CSRF token, a one-time message), that wins and the
+  block remains uncacheable.
+- *Forever* stores the entry until a relevant cache-tag invalidation occurs (e.g.
+  when the content the block depends on is saved).
+
 ## Maintainers
 
 Current maintainers:

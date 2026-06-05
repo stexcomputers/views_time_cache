@@ -1,0 +1,4 @@
+administer block cache max-age:
+  title: 'Administer block cache max-age'
+  description: 'Set the cache max-age (lifetime) on individual blocks. Grants the ability to override how long a block is held in Drupal''s render cache.'
+  restrict access: true
