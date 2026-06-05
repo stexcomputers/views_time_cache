@@ -3,14 +3,13 @@
 ## Introduction
 
 Views Time Cache provides a **time-based caching plugin** for Drupal Views that
-improves on the built-in "Time-based" option. Instead of raw-second dropdowns and
-two separate knobs, it offers:
+extends the built-in "Time-based" option with friendlier presets and an extra
+cron expression mode:
 
 - **Friendly preset intervals**: 1 hour, 6 hours, 12 hours, 1 day, 1 week, Forever
+  — separate selections for **Query results** and **Rendered output**
 - **Cron expression mode**: enter a standard 5-field cron expression
   (`0 */6 * * *`) and the cache expires exactly at each matching boundary
-- **Single duration** for both query results and rendered output (simpler and
-  usually what you want)
 - **No extra dependencies**: the cron evaluator is self-contained — no additional
   Composer packages required
 
@@ -38,9 +37,10 @@ Or download and place in `web/modules/contrib/views_time_cache/`, then enable vi
 
 1. Edit any View.
 2. Under **Advanced → Caching**, click the current cache setting.
-3. Select **Time-based (presets & cron)** from the "For" dropdown.
-4. Choose a **Preset interval** or switch to **Cron expression** mode and enter
-   your expression (e.g. `0 6 * * *` to refresh daily at 6 AM).
+3. Select **Time-based (presets & cron)** from the plugin dropdown.
+4. Choose **Preset interval** mode and pick durations for **Query results** and
+   **Rendered output**, or switch to **Cron expression** mode and enter your
+   expression (e.g. `0 6 * * *` to refresh daily at 6 AM).
 5. Save the View.
 
 ### Cron expression reference
@@ -69,4 +69,4 @@ applies — the cache expires if **either** condition matches.
 ## Maintainers
 
 Current maintainers:
-- [Your drupal.org username](https://www.drupal.org/u/your-username)
+- [jbuttler](https://www.drupal.org/u/jbuttler)

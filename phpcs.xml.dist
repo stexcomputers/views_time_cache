@@ -6,4 +6,13 @@
   <arg name="extensions" value="php,module,inc,install,test,profile,theme,info,txt,md,yml"/>
   <file>.</file>
   <exclude-pattern>*/vendor/*</exclude-pattern>
+  <!-- Markdown files do not need line-length enforcement. -->
+  <rule ref="Generic.Files.LineLength">
+    <exclude-pattern>*.md</exclude-pattern>
+    <!-- Hard error at 150 chars; drupal.org CI uses this threshold. -->
+    <properties>
+      <property name="lineLimit" value="80"/>
+      <property name="absoluteLineLimit" value="150"/>
+    </properties>
+  </rule>
 </ruleset>

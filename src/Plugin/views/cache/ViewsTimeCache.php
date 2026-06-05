@@ -20,7 +20,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 #[ViewsCache(
   id: 'views_time_cache',
   title: new TranslatableMarkup('Time-based (presets & cron)'),
-  help: new TranslatableMarkup('Cache view results for a preset duration or until a cron expression fires.'),
+  help: new TranslatableMarkup('Cache view results for preset intervals or until a cron boundary.'),
 )]
 class ViewsTimeCache extends CachePluginBase {
 
@@ -56,7 +56,12 @@ class ViewsTimeCache extends CachePluginBase {
   /**
    * {@inheritdoc}
    */
-  public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition) {
+  public static function create(
+    ContainerInterface $container,
+    array $configuration,
+    $plugin_id,
+    $plugin_definition,
+  ) {
     return new static(
       $configuration,
       $plugin_id,
@@ -72,7 +77,8 @@ class ViewsTimeCache extends CachePluginBase {
   protected function defineOptions() {
     $options = parent::defineOptions();
     $options['cache_mode'] = ['default' => 'preset'];
-    $options['preset'] = ['default' => 3600];
+    $options['results_preset'] = ['default' => 3600];
+    $options['output_preset'] = ['default' => 3600];
     $options['cron_expression'] = ['default' => '0 * * * *'];
     return $options;
   }
@@ -93,32 +99,43 @@ class ViewsTimeCache extends CachePluginBase {
       '#default_value' => $this->options['cache_mode'],
     ];
 
-    $form['preset'] = [
+    $preset_options = [
+      3600   => $this->t('1 hour'),
+      21600  => $this->t('6 hours'),
+      43200  => $this->t('12 hours'),
+      86400  => $this->t('1 day'),
+      604800 => $this->t('1 week'),
+      0      => $this->t('Forever'),
+    ];
+    $preset_states = [
+      'visible' => [
+        ':input[name="cache_options[cache_mode]"]' => ['value' => 'preset'],
+      ],
+    ];
+
+    $form['results_preset'] = [
       '#type' => 'select',
-      '#title' => $this->t('Interval'),
-      '#options' => [
-        3600   => $this->t('1 hour'),
-        21600  => $this->t('6 hours'),
-        43200  => $this->t('12 hours'),
-        86400  => $this->t('1 day'),
-        604800 => $this->t('1 week'),
-        0      => $this->t('Forever'),
-      ],
-      '#default_value' => $this->options['preset'],
-      '#description' => $this->t('"Forever" disables time-based expiry; content cache tags still invalidate the cache.'),
-      '#states' => [
-        'visible' => [
-          ':input[name="cache_options[cache_mode]"]' => ['value' => 'preset'],
-        ],
-      ],
+      '#title' => $this->t('Query results'),
+      '#options' => $preset_options,
+      '#default_value' => $this->options['results_preset'],
+      '#description' => $this->t('The length of time raw query results should be cached.'),
+      '#states' => $preset_states,
+    ];
+
+    $form['output_preset'] = [
+      '#type' => 'select',
+      '#title' => $this->t('Rendered output'),
+      '#options' => $preset_options,
+      '#default_value' => $this->options['output_preset'],
+      '#description' => $this->t('The length of time rendered HTML output should be cached.'),
+      '#states' => $preset_states,
     ];
 
     $form['cron_expression'] = [
       '#type' => 'textfield',
       '#title' => $this->t('Cron expression'),
       '#default_value' => $this->options['cron_expression'],
-      // phpcs:ignore Drupal.Semantics.FunctionT.NotLiteralString
-      '#description' => $this->t('Standard 5-field cron expression (minute hour day-of-month month day-of-week). The cache rebuilds at each boundary. Examples: <code>0 * * * *</code> (hourly), <code>0 0 * * *</code> (midnight daily).'),
+      '#description' => $this->t('5-field cron expression (min hr dom month dow). E.g. <code>0 * * * *</code> (hourly).'),
       '#states' => [
         'visible' => [
           ':input[name="cache_options[cache_mode]"]' => ['value' => 'cron'],
@@ -143,7 +160,7 @@ class ViewsTimeCache extends CachePluginBase {
       elseif (!CronExpression::isValid($expr)) {
         $form_state->setError(
           $form['cron_expression'],
-          $this->t('Invalid cron expression. Use standard 5-field format, e.g. <code>0 * * * *</code>.')
+          $this->t('Invalid cron expression. Use 5-field format, e.g. <code>0 * * * *</code>.')
         );
       }
     }
@@ -156,11 +173,23 @@ class ViewsTimeCache extends CachePluginBase {
     if ($this->options['cache_mode'] === 'cron') {
       return $this->t('Cron: @expr', ['@expr' => $this->options['cron_expression']]);
     }
-    $preset = (int) $this->options['preset'];
-    if ($preset === 0) {
-      return $this->t('Forever');
+    $results = (int) $this->options['results_preset'];
+    $output  = (int) $this->options['output_preset'];
+    if ($results === $output) {
+      if ($results === 0) {
+        return $this->t('Forever');
+      }
+      $interval = $this->dateFormatter->formatInterval($results, 1);
+      return $this->t('Every @interval', ['@interval' => $interval]);
     }
-    return $this->t('Every @interval', ['@interval' => $this->dateFormatter->formatInterval($preset, 1)]);
+    $ri = $this->dateFormatter->formatInterval($results, 1);
+    $oi = $this->dateFormatter->formatInterval($output, 1);
+    $results_label = $results === 0 ? $this->t('Forever') : $ri;
+    $output_label = $output === 0 ? $this->t('Forever') : $oi;
+    return $this->t('@results / @output', [
+      '@results' => $results_label,
+      '@output'  => $output_label,
+    ]);
   }
 
   /**
@@ -173,7 +202,7 @@ class ViewsTimeCache extends CachePluginBase {
     if ($this->options['cache_mode'] === 'cron') {
       return $this->getCronCutoff();
     }
-    $lifespan = (int) $this->options['preset'];
+    $lifespan = $this->getPresetLifespan($type);
     if ($lifespan === 0) {
       return FALSE;
     }
@@ -187,7 +216,7 @@ class ViewsTimeCache extends CachePluginBase {
     if ($this->options['cache_mode'] === 'cron') {
       return $this->getCronMaxAge();
     }
-    $lifespan = (int) $this->options['preset'];
+    $lifespan = $this->getPresetLifespan($type);
     return $lifespan > 0 ? $lifespan : Cache::PERMANENT;
   }
 
@@ -196,6 +225,22 @@ class ViewsTimeCache extends CachePluginBase {
    */
   protected function getDefaultCacheMaxAge() {
     return (int) $this->cacheSetMaxAge('output');
+  }
+
+  /**
+   * Returns the preset lifespan in seconds for the given cache type.
+   *
+   * @param string $type
+   *   Either 'results' for query results or 'output' for rendered output.
+   *
+   * @return int
+   *   Lifespan in seconds; 0 means forever.
+   */
+  private function getPresetLifespan(string $type): int {
+    if ($type === 'output') {
+      return (int) $this->options['output_preset'];
+    }
+    return (int) $this->options['results_preset'];
   }
 
   /**

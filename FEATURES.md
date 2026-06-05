@@ -4,7 +4,7 @@
 
 - Adds a **"Time-based (presets & cron)"** cache option to every Views display
 - Selectable from the standard Views Caching UI (Advanced → Caching)
-- Applies a single duration to both query results and rendered output
+- Separate duration controls for **Query results** and **Rendered output**
 
 ## Preset intervals
 
