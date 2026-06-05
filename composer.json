@@ -4,6 +4,6 @@
   "description": "Provides a time-based Views cache plugin with friendly preset intervals and cron expression support.",
   "license": "GPL-2.0-or-later",
   "require": {
-    "drupal/core": "^10 || ^11"
+    "drupal/core": "^10.3 || ^11"
   }
 }
