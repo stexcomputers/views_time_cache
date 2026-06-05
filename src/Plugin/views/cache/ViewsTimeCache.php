@@ -3,7 +3,6 @@
 namespace Drupal\views_time_cache\Plugin\views\cache;
 
 use Drupal\Component\Datetime\TimeInterface;
-use Drupal\Core\Cache\Cache;
 use Drupal\Core\Datetime\DateFormatterInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
@@ -190,6 +189,9 @@ class ViewsTimeCache extends CachePluginBase {
       if ($results === 0) {
         return $this->t('Forever');
       }
+      if ($results < 0) {
+        return $this->t('Never');
+      }
       return $this->t(
         'Every @interval',
         ['@interval' => $this->dateFormatter->formatInterval($results, 1)]
@@ -197,8 +199,16 @@ class ViewsTimeCache extends CachePluginBase {
     }
     $ri = $this->dateFormatter->formatInterval($results, 1);
     $oi = $this->dateFormatter->formatInterval($output, 1);
-    $results_label = $results === 0 ? $this->t('Forever') : $ri;
-    $output_label = $output === 0 ? $this->t('Forever') : $oi;
+    $results_label = match(TRUE) {
+      $results === 0 => $this->t('Forever'),
+      $results < 0   => $this->t('Never'),
+      default        => $ri,
+    };
+    $output_label = match(TRUE) {
+      $output === 0 => $this->t('Forever'),
+      $output < 0   => $this->t('Never'),
+      default       => $oi,
+    };
     return $this->t(
       '@results / @output',
       ['@results' => $results_label, '@output' => $output_label]
@@ -219,7 +229,12 @@ class ViewsTimeCache extends CachePluginBase {
     }
     $lifespan = $this->getPresetLifespan($type);
     if ($lifespan === 0) {
+      // Forever: no time-based expiry; rely on cache tag invalidation.
       return FALSE;
+    }
+    if ($lifespan < 0) {
+      // Never: every stored entry is immediately stale.
+      return $this->time->getRequestTime();
     }
     return $this->time->getRequestTime() - $lifespan;
   }
@@ -233,8 +248,9 @@ class ViewsTimeCache extends CachePluginBase {
         $this->options['cron_expression']
       );
     }
-    $lifespan = $this->getPresetLifespan($type);
-    return $lifespan > 0 ? $lifespan : Cache::PERMANENT;
+    return $this->calculator->maxAgeForPreset(
+      $this->getPresetLifespan($type)
+    );
   }
 
   /**

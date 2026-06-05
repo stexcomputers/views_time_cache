@@ -8,8 +8,10 @@
 
 ## Preset intervals
 
-- Six ready-to-use intervals: **1 hour**, **6 hours**, **12 hours**, **1 day**,
-  **1 week**, **Forever**
+- Seven ready-to-use intervals: **Never**, **1 hour**, **6 hours**, **12 hours**,
+  **1 day**, **1 week**, **Forever**
+- **Never** sets max-age to 0, telling Drupal to never cache the view — output
+  is always rebuilt on every request
 - **Forever** disables time-based expiry while keeping content cache-tag
   invalidation active
 
@@ -34,8 +36,8 @@
 
 - Overrides the render-cache max-age on **any block** placed via the Block
   Layout UI (Structure → Block layout)
-- Same three modes available as the Views plugin: **Preset interval**,
-  **Forever**, and **Cron expression**
+- Same three modes available as the Views plugin: **Preset interval** (including
+  **Never** and **Forever**), and **Cron expression**
 - Collapsed "Cache max-age" fieldset on each block's configure form — only
   visible to users with the new **Administer block cache max-age** permission
 - Drupal's cacheability bubbling means this value replaces the block plugin's

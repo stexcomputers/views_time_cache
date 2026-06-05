@@ -7,7 +7,7 @@ block.block.*.third_party.views_time_cache:
       label: 'Cache max-age mode (preset or cron; empty = no override)'
     max_age_preset:
       type: integer
-      label: 'Preset interval in seconds (0 = forever / Cache::PERMANENT)'
+      label: 'Preset interval in seconds (0 = forever, -2 = never / max-age 0)'
     cron_expression:
       type: string
       label: 'Cron expression'
@@ -25,10 +25,10 @@ views.cache.views_time_cache:
           label: 'Cache mode (preset or cron)'
         results_preset:
           type: integer
-          label: 'Query-results preset interval in seconds (0 = forever)'
+          label: 'Query-results preset interval in seconds (0 = forever, -2 = never)'
         output_preset:
           type: integer
-          label: 'Rendered-output preset interval in seconds (0 = forever)'
+          label: 'Rendered-output preset interval in seconds (0 = forever, -2 = never)'
         cron_expression:
           type: string
           label: 'Cron expression'

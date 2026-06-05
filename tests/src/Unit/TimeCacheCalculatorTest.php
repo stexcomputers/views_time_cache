@@ -77,6 +77,16 @@ class TimeCacheCalculatorTest extends UnitTestCase {
   }
 
   /**
+   * Never preset (-2) returns max-age 0 (uncacheable).
+   *
+   * @covers ::maxAgeForPreset
+   */
+  public function testMaxAgeForPresetNever(): void {
+    $calc = $this->buildCalculator(self::FIXTURE_TS);
+    $this->assertSame(0, $calc->maxAgeForPreset(-2));
+  }
+
+  /**
    * @covers ::maxAgeForCron
    */
   public function testMaxAgeForCronHourly(): void {
@@ -161,7 +171,9 @@ class TimeCacheCalculatorTest extends UnitTestCase {
     $calc    = $this->buildCalculator(self::FIXTURE_TS);
     $options = $calc->getPresetOptions();
     $this->assertIsArray($options);
-    $this->assertCount(6, $options);
+    $this->assertCount(7, $options);
+    // Never.
+    $this->assertArrayHasKey(-2, $options);
     // Forever.
     $this->assertArrayHasKey(0, $options);
     // 1 hour.

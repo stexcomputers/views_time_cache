@@ -60,13 +60,19 @@ class TimeCacheCalculator {
    * Returns the cache max-age for a preset interval.
    *
    * @param int $preset
-   *   Seconds; 0 means forever (Cache::PERMANENT).
+   *   Seconds; 0 = forever (Cache::PERMANENT); negative = never (max-age 0).
    *
    * @return int
-   *   Seconds, or Cache::PERMANENT (-1) when $preset is 0.
+   *   Seconds, Cache::PERMANENT (-1) when $preset is 0 (forever), or 0 when
+   *   $preset is negative (never cache).
    */
   public function maxAgeForPreset(int $preset): int {
-    return $preset > 0 ? $preset : Cache::PERMANENT;
+    if ($preset > 0) {
+      return $preset;
+    }
+    // 0 = Forever (no time-based expiry; rely on cache tags).
+    // Negative = Never (max-age 0; Drupal treats the item as uncacheable).
+    return $preset === 0 ? Cache::PERMANENT : 0;
   }
 
   /**
@@ -132,10 +138,12 @@ class TimeCacheCalculator {
    * Returns the labelled preset options for form selects.
    *
    * @return array<int, \Drupal\Core\StringTranslation\TranslatableMarkup>
-   *   Keyed by seconds (0 = Forever / Cache::PERMANENT).
+   *   Keyed by seconds. Special values: 0 = Forever (Cache::PERMANENT);
+   *   -2 = Never (max-age 0, uncacheable).
    */
   public function getPresetOptions(): array {
     return [
+      -2     => new TranslatableMarkup('Never'),
       3600   => new TranslatableMarkup('1 hour'),
       21600  => new TranslatableMarkup('6 hours'),
       43200  => new TranslatableMarkup('12 hours'),
